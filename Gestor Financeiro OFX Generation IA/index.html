@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gerador de OFX com IA</title>
+    <title>Gestor Financeiro OFX</title>
     <link rel="manifest" href="manifest.json">
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -31,7 +31,17 @@
 <body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
 
     <div class="bg-white p-6 md:p-8 rounded-2xl shadow-xl w-full max-w-4xl space-y-6">
-        <h1 class="text-3xl md:text-4xl font-extrabold text-center text-blue-800">Gestor Financeiro OFX Generation IA 💻</h1>
+        <!-- Header com status de usuário e botões -->
+        <div class="flex justify-between items-center pb-4 border-b border-gray-200">
+            <h1 class="text-3xl md:text-4xl font-extrabold text-blue-800">Gestor Financeiro 💻</h1>
+            <div id="user-status" class="flex items-center space-x-2">
+                <span id="user-display" class="text-gray-600 text-sm font-medium">Não autenticado</span>
+                <button id="auth-btn" class="px-4 py-2 bg-blue-600 text-white font-bold rounded-full text-sm hover:bg-blue-700 transition-colors duration-200">
+                    Login / Cadastrar
+                </button>
+            </div>
+        </div>
+
         <p class="text-center text-gray-600">
             Insira suas transações manualmente e gere um arquivo OFX para importação, com a ajuda da inteligência artificial.
         </p>
@@ -65,7 +75,8 @@
                 </div>
                 <div class="lg:col-span-4">
                     <label for="category" class="block text-sm font-medium text-gray-700">Categoria (opcional)</label>
-                    <input type="text" id="category" placeholder="Ex: Alimentação, Transporte" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50 p-2 border">
+                    <input list="category-list" id="category" placeholder="Ex: Alimentação, Transporte" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50 p-2 border">
+                    <datalist id="category-list"></datalist>
                 </div>
                 <div>
                     <label for="amount" class="block text-sm font-medium text-gray-700">Valor Total (use ponto, ex: 150.50)</label>
@@ -142,6 +153,32 @@
             </div>
         </div>
 
+        <!-- Modal de Autenticação -->
+        <div id="auth-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden flex items-center justify-center p-4">
+            <div class="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+                <div class="flex justify-between items-center pb-3 border-b">
+                    <h3 class="text-xl font-bold text-blue-700">Login / Cadastro</h3>
+                    <button id="close-auth-modal-btn" class="text-gray-400 hover:text-gray-600 transition-colors">&times;</button>
+                </div>
+                <div class="mt-4">
+                    <form id="auth-form" class="space-y-4">
+                        <div>
+                            <label for="email" class="block text-sm font-medium text-gray-700">E-mail</label>
+                            <input type="email" id="email" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50 p-2 border">
+                        </div>
+                        <div>
+                            <label for="password" class="block text-sm font-medium text-gray-700">Senha</label>
+                            <input type="password" id="password" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50 p-2 border">
+                        </div>
+                        <div class="flex justify-between items-center space-x-2">
+                            <button type="submit" id="login-btn" class="w-1/2 px-4 py-2 bg-blue-600 text-white font-bold rounded-full text-sm hover:bg-blue-700 transition-colors duration-200">Login</button>
+                            <button type="button" id="signup-btn" class="w-1/2 px-4 py-2 bg-gray-600 text-white font-bold rounded-full text-sm hover:bg-gray-700 transition-colors duration-200">Cadastrar</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
         <!-- Mensagem de status -->
         <div id="status-message" class="text-center mt-4 p-2 rounded-xl text-gray-700 hidden"></div>
         <div id="loading-indicator" class="flex justify-center items-center mt-4 hidden">
@@ -153,8 +190,25 @@
     <script type="module">
         // Importa os módulos necessários do Firebase
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, addDoc, deleteDoc, onSnapshot, collection, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { 
+            getAuth, 
+            signInAnonymously, 
+            signInWithCustomToken, 
+            onAuthStateChanged,
+            createUserWithEmailAndPassword,
+            signInWithEmailAndPassword,
+            signOut
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { 
+            getFirestore, 
+            doc, 
+            addDoc, 
+            deleteDoc, 
+            onSnapshot, 
+            collection, 
+            getDocs, 
+            query
+        } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Global variables provided by the Canvas environment
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
@@ -166,7 +220,10 @@
         let db;
         let auth;
         let userId = null;
-        let transactions = []; // Array para armazenar os dados do Firestore
+        let transactions = [];
+        let categories = [];
+        const apiKey = "";
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
 
         // Mapeamento das contas para informações do OFX
         const accountsData = {
@@ -186,11 +243,23 @@
         const statusMessage = document.getElementById('status-message');
         const loadingIndicator = document.getElementById('loading-indicator');
         const categoryInput = document.getElementById('category');
+        const categoryList = document.getElementById('category-list');
         const descriptionInput = document.getElementById('description');
         const suggestCategoryBtn = document.getElementById('suggest-category-btn');
         const analysisModal = document.getElementById('analysis-modal');
         const analysisContent = document.getElementById('analysis-content');
         const closeModalBtn = document.getElementById('close-modal-btn');
+        
+        const authBtn = document.getElementById('auth-btn');
+        const userDisplay = document.getElementById('user-display');
+        const authModal = document.getElementById('auth-modal');
+        const closeAuthModalBtn = document.getElementById('close-auth-modal-btn');
+        const authForm = document.getElementById('auth-form');
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        const loginBtn = document.getElementById('login-btn');
+        const signupBtn = document.getElementById('signup-btn');
+
 
         // Novos elementos para parcelamento
         const isInstallmentCheckbox = document.getElementById('is-installment');
@@ -216,6 +285,13 @@
                 onAuthStateChanged(auth, (user) => {
                     if (user) {
                         userId = user.uid;
+                        if (user.isAnonymous) {
+                            userDisplay.textContent = `Anônimo (${userId.substring(0, 4)}...)`;
+                            authBtn.textContent = 'Login / Cadastrar';
+                        } else {
+                            userDisplay.textContent = `Logado como: ${user.email}`;
+                            authBtn.textContent = 'Logout';
+                        }
                         updateStatusMessage('Conectado. Carregando dados...', 'bg-gray-200');
                         loadingIndicator.classList.remove('hidden');
                         
@@ -234,7 +310,26 @@
                             updateStatusMessage('Erro ao carregar dados. Verifique o console.', 'bg-red-100');
                             loadingIndicator.classList.add('hidden');
                         });
+
+                        // Configura um ouvinte em tempo real para as categorias do usuário
+                        const userCategoriesRef = collection(db, `artifacts/${appId}/users/${userId}/categories`);
+                        onSnapshot(userCategoriesRef, (snapshot) => {
+                            categories = [];
+                            snapshot.forEach((doc) => {
+                                categories.push(doc.data().name);
+                            });
+                            renderCategories();
+                        }, (error) => {
+                            console.error("Erro ao ouvir categorias:", error);
+                        });
                     } else {
+                        userId = null;
+                        transactions = [];
+                        categories = [];
+                        userDisplay.textContent = 'Não autenticado';
+                        authBtn.textContent = 'Login / Cadastrar';
+                        renderTransactions();
+                        renderCategories();
                         console.log("Usuário não autenticado.");
                         updateStatusMessage('Não foi possível autenticar. Os dados não serão salvos.', 'bg-red-100');
                         loadingIndicator.classList.add('hidden');
@@ -289,6 +384,11 @@
             loadingIndicator.classList.remove('hidden');
             
             try {
+                // Salva a categoria no Firestore, se ela não existir
+                if (category && !categories.includes(category)) {
+                    await addDoc(collection(db, `artifacts/${appId}/users/${userId}/categories`), { name: category });
+                }
+
                 if (isInstallmentCheckbox.checked) {
                     const installments = parseInt(installmentsInput.value);
                     const installmentAmount = totalAmount / installments;
@@ -329,6 +429,52 @@
             }
         });
 
+        // Lógica dos modais de autenticação
+        authBtn.addEventListener('click', () => {
+            if (userId && !auth.currentUser.isAnonymous) {
+                signOut(auth);
+            } else {
+                authModal.classList.remove('hidden');
+            }
+        });
+        closeAuthModalBtn.addEventListener('click', () => authModal.classList.add('hidden'));
+
+        authForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+        });
+
+        loginBtn.addEventListener('click', async () => {
+            const email = emailInput.value;
+            const password = passwordInput.value;
+            try {
+                loadingIndicator.classList.remove('hidden');
+                await signInWithEmailAndPassword(auth, email, password);
+                authModal.classList.add('hidden');
+                updateStatusMessage('Login realizado com sucesso!', 'bg-green-100');
+            } catch (error) {
+                console.error("Erro no login:", error);
+                updateStatusMessage('Erro no login. Verifique e-mail e senha.', 'bg-red-100');
+            } finally {
+                loadingIndicator.classList.add('hidden');
+            }
+        });
+
+        signupBtn.addEventListener('click', async () => {
+            const email = emailInput.value;
+            const password = passwordInput.value;
+            try {
+                loadingIndicator.classList.remove('hidden');
+                await createUserWithEmailAndPassword(auth, email, password);
+                authModal.classList.add('hidden');
+                updateStatusMessage('Cadastro realizado com sucesso! Faça login.', 'bg-green-100');
+            } catch (error) {
+                console.error("Erro no cadastro:", error);
+                updateStatusMessage('Erro no cadastro. Tente outro e-mail.', 'bg-red-100');
+            } finally {
+                loadingIndicator.classList.add('hidden');
+            }
+        });
+
         // Função para renderizar a lista de transações
         function renderTransactions() {
             transactionList.innerHTML = '';
@@ -357,6 +503,16 @@
                     transactionList.appendChild(row);
                 });
             }
+        }
+
+        // Função para renderizar as categorias
+        function renderCategories() {
+            categoryList.innerHTML = '';
+            categories.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat;
+                categoryList.appendChild(option);
+            });
         }
 
         // Função para remover uma transação
