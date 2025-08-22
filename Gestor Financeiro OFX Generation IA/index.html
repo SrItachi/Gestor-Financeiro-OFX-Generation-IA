@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerador de OFX com IA</title>
+    <link rel="manifest" href="manifest.json">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+            color: #1f2937;
+        }
+        .loader {
+            border-top-color: #3b82f6;
+            -webkit-animation: spinner 1.5s linear infinite;
+            animation: spinner 1.5s linear infinite;
+        }
+        @-webkit-keyframes spinner {
+            0% { -webkit-transform: rotate(0deg); }
+            100% { -webkit-transform: rotate(360deg); }
+        }
+        @keyframes spinner {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
+
+    <div class="bg-white p-6 md:p-8 rounded-2xl shadow-xl w-full max-w-4xl space-y-6">
+        <h1 class="text-3xl md:text-4xl font-extrabold text-center text-blue-800">Gestor Financeiro OFX Generation IA 💻</h1>
+        <p class="text-center text-gray-600">
+            Insira suas transações manualmente e gere um arquivo OFX para importação, com a ajuda da inteligência artificial.
+        </p>
+
+        <!-- Formulário para adicionar transação -->
+        <div class="bg-gray-50 p-5 rounded-xl border border-gray-200">
+            <h2 class="text-xl font-bold mb-4 text-blue-700">Adicionar Nova Transação</h2>
+            <form id="transaction-form" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="lg:col-span-2">
+                    <label for="date" class="block text-sm font-medium text-gray-700">Data da Compra</label>
+                    <input type="date" id="date" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50 p-2 border">
+                </div>
+                <div class="lg:col-span-2">
+                    <label for="account" class="block text-sm font-medium text-gray-700">Cartão / Conta</label>
+                    <select id="account" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50 p-2 border">
+                        <option value="" disabled selected>Selecione a conta</option>
+                        <option value="atacadão-jhonatan">Atacadão Mastercard (Jhonatan)</option>
+                        <option value="magazine-hellen">Magazine Luiza Mastercard (Hellen)</option>
+                        <option value="sicoob-jhonatan">Sicoob Mastercard (Jhonatan)</option>
+                        <option value="farmacia-crediario">Crediário Farmácia</option>
+                    </select>
+                </div>
+                <div class="lg:col-span-4">
+                    <label for="description" class="block text-sm font-medium text-gray-700">Descrição</label>
+                    <input type="text" id="description" placeholder="Ex: Conta de luz, Compras" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50 p-2 border">
+                </div>
+                <div class="col-span-1 md:col-span-2 lg:col-span-4 flex justify-end">
+                     <button type="button" id="suggest-category-btn" class="w-full md:w-auto px-6 py-2 bg-purple-600 text-white font-bold rounded-full shadow-lg hover:bg-purple-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2">
+                        💡 Sugerir Categoria
+                    </button>
+                </div>
+                <div class="lg:col-span-4">
+                    <label for="category" class="block text-sm font-medium text-gray-700">Categoria (opcional)</label>
+                    <input type="text" id="category" placeholder="Ex: Alimentação, Transporte" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50 p-2 border">
+                </div>
+                <div>
+                    <label for="amount" class="block text-sm font-medium text-gray-700">Valor Total (use ponto, ex: 150.50)</label>
+                    <input type="number" step="0.01" id="amount" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50 p-2 border">
+                </div>
+                <div class="flex items-center space-x-2">
+                    <input type="checkbox" id="is-installment" class="rounded text-blue-600 focus:ring-blue-500">
+                    <label for="is-installment" class="text-sm font-medium text-gray-700">É uma compra parcelada?</label>
+                </div>
+                <div id="installment-details" class="lg:col-span-4 grid grid-cols-1 md:grid-cols-2 gap-4 hidden">
+                    <div>
+                        <label for="installments" class="block text-sm font-medium text-gray-700">Número de Parcelas</label>
+                        <input type="number" id="installments" min="2" value="2" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50 p-2 border">
+                    </div>
+                    <div>
+                        <label for="installment-amount" class="block text-sm font-medium text-gray-700">Valor da Parcela</label>
+                        <input type="text" id="installment-amount" disabled class="mt-1 block w-full bg-gray-200 rounded-md border-gray-300 shadow-sm p-2 border">
+                    </div>
+                </div>
+                <div class="col-span-1 md:col-span-2 lg:col-span-4 flex justify-center">
+                    <button type="submit" class="w-full md:w-auto px-6 py-3 bg-blue-600 text-white font-bold rounded-full shadow-lg hover:bg-blue-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 p-2">
+                        ✅ Adicionar Transação
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Tabela de transações -->
+        <div class="overflow-x-auto rounded-xl shadow-inner border border-gray-200">
+            <h2 class="text-xl font-bold p-4 text-blue-700">Transações Adicionadas</h2>
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-100">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Data</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Conta</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descrição</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoria</th>
+                        <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Valor</th>
+                        <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Ações</th>
+                    </tr>
+                </thead>
+                <tbody id="transaction-list" class="bg-white divide-y divide-gray-200">
+                    <!-- Transações serão adicionadas aqui via JavaScript -->
+                </tbody>
+            </table>
+            <div id="no-transactions-message" class="text-center p-4 text-gray-500 hidden">
+                Nenhuma transação adicionada ainda.
+            </div>
+        </div>
+
+        <!-- Botões de ação -->
+        <div class="flex flex-col md:flex-row justify-center gap-4 mt-6">
+            <button id="analyze-btn" class="w-full md:w-auto px-6 py-3 bg-fuchsia-600 text-white font-bold rounded-full shadow-lg hover:bg-fuchsia-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-fuchsia-500 focus:ring-offset-2 disabled:bg-gray-400">
+                📊 Análise de Gastos
+            </button>
+            <button id="export-ofx-btn" class="w-full md:w-auto px-6 py-3 bg-green-600 text-white font-bold rounded-full shadow-lg hover:bg-green-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:bg-gray-400">
+                🗂️ Baixar Arquivo OFX
+            </button>
+            <button id="clear-all-btn" class="w-full md:w-auto px-6 py-3 bg-red-600 text-white font-bold rounded-full shadow-lg hover:bg-red-700 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2">
+                Limpar Tudo
+            </button>
+        </div>
+
+        <!-- Modal de Análise -->
+        <div id="analysis-modal" class="fixed inset-0 bg-gray-600 bg-opacity-50 hidden flex items-center justify-center p-4">
+            <div class="bg-white rounded-lg shadow-xl max-w-lg w-full p-6">
+                <div class="flex justify-between items-center pb-3 border-b">
+                    <h3 class="text-xl font-bold text-blue-700">Análise de Gastos</h3>
+                    <button id="close-modal-btn" class="text-gray-400 hover:text-gray-600 transition-colors">&times;</button>
+                </div>
+                <div id="analysis-content" class="mt-4 text-gray-700 leading-relaxed">
+                    <!-- O conteúdo da análise será injetado aqui -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Mensagem de status -->
+        <div id="status-message" class="text-center mt-4 p-2 rounded-xl text-gray-700 hidden"></div>
+        <div id="loading-indicator" class="flex justify-center items-center mt-4 hidden">
+            <div class="loader ease-linear rounded-full border-4 border-t-4 border-gray-200 h-8 w-8"></div>
+            <span class="ml-3 text-gray-600">Conectando...</span>
+        </div>
+    </div>
+
+    <script type="module">
+        // Importa os módulos necessários do Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, addDoc, deleteDoc, onSnapshot, collection, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global variables provided by the Canvas environment
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        // Inicializa o Firebase e o Firestore
+        let app;
+        let db;
+        let auth;
+        let userId = null;
+        let transactions = []; // Array para armazenar os dados do Firestore
+
+        // Mapeamento das contas para informações do OFX
+        const accountsData = {
+            'atacadão-jhonatan': { org: 'ATACADAO', owner: 'JHONATAN', bankId: '9991', acctId: 'ATACADAO-JHONATAN', currency: 'BRL' },
+            'magazine-hellen': { org: 'MAGALU', owner: 'HELLEN', bankId: '9992', acctId: 'MAGAZINE-HELLEN', currency: 'BRL' },
+            'sicoob-jhonatan': { org: 'SICOOB', owner: 'JHONATAN', bankId: '756', acctId: 'SICOOB-JHONATAN', currency: 'BRL' },
+            'farmacia-crediario': { org: 'FARMACIA', owner: 'JHONATAN', bankId: '9993', acctId: 'FARMACIA-CREDIARIO', currency: 'BRL' }
+        };
+
+        // Elementos do DOM
+        const form = document.getElementById('transaction-form');
+        const transactionList = document.getElementById('transaction-list');
+        const noTransactionsMessage = document.getElementById('no-transactions-message');
+        const exportBtn = document.getElementById('export-ofx-btn');
+        const analyzeBtn = document.getElementById('analyze-btn');
+        const clearBtn = document.getElementById('clear-all-btn');
+        const statusMessage = document.getElementById('status-message');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const categoryInput = document.getElementById('category');
+        const descriptionInput = document.getElementById('description');
+        const suggestCategoryBtn = document.getElementById('suggest-category-btn');
+        const analysisModal = document.getElementById('analysis-modal');
+        const analysisContent = document.getElementById('analysis-content');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+
+        // Novos elementos para parcelamento
+        const isInstallmentCheckbox = document.getElementById('is-installment');
+        const installmentDetailsDiv = document.getElementById('installment-details');
+        const installmentsInput = document.getElementById('installments');
+        const installmentAmountInput = document.getElementById('installment-amount');
+        const amountInput = document.getElementById('amount');
+
+        // Lógica de Autenticação e Firestore
+        window.addEventListener('load', async () => {
+            if (Object.keys(firebaseConfig).length > 0) {
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+
+                // Autenticação anônima para manter a privacidade do usuário
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken).catch(error => console.error("Erro na autenticação personalizada:", error));
+                } else {
+                    await signInAnonymously(auth).catch(error => console.error("Erro na autenticação anônima:", error));
+                }
+
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        updateStatusMessage('Conectado. Carregando dados...', 'bg-gray-200');
+                        loadingIndicator.classList.remove('hidden');
+                        
+                        // Configura um ouvinte em tempo real para as transações do usuário
+                        const userTransactionsRef = collection(db, `artifacts/${appId}/users/${userId}/transactions`);
+                        onSnapshot(userTransactionsRef, (snapshot) => {
+                            transactions = [];
+                            snapshot.forEach((doc) => {
+                                transactions.push({ id: doc.id, ...doc.data() });
+                            });
+                            renderTransactions();
+                            loadingIndicator.classList.add('hidden');
+                            updateStatusMessage('Dados carregados com sucesso!', 'bg-green-100');
+                        }, (error) => {
+                            console.error("Erro ao ouvir transações:", error);
+                            updateStatusMessage('Erro ao carregar dados. Verifique o console.', 'bg-red-100');
+                            loadingIndicator.classList.add('hidden');
+                        });
+                    } else {
+                        console.log("Usuário não autenticado.");
+                        updateStatusMessage('Não foi possível autenticar. Os dados não serão salvos.', 'bg-red-100');
+                        loadingIndicator.classList.add('hidden');
+                    }
+                });
+            } else {
+                console.error("Configuração do Firebase não encontrada. O aplicativo não terá persistência de dados.");
+                updateStatusMessage('Configuração do Firebase ausente. Os dados não serão salvos.', 'bg-red-100');
+                loadingIndicator.classList.add('hidden');
+            }
+        });
+
+        // Event listener para mostrar/esconder campos de parcelamento
+        isInstallmentCheckbox.addEventListener('change', () => {
+            if (isInstallmentCheckbox.checked) {
+                installmentDetailsDiv.classList.remove('hidden');
+                updateInstallmentAmount();
+            } else {
+                installmentDetailsDiv.classList.add('hidden');
+            }
+        });
+
+        amountInput.addEventListener('input', updateInstallmentAmount);
+        installmentsInput.addEventListener('input', updateInstallmentAmount);
+
+        function updateInstallmentAmount() {
+            const totalAmount = parseFloat(amountInput.value);
+            const installments = parseInt(installmentsInput.value);
+            if (!isNaN(totalAmount) && !isNaN(installments) && installments > 0) {
+                const installmentAmount = totalAmount / installments;
+                installmentAmountInput.value = installmentAmount.toFixed(2).replace('.', ',');
+            } else {
+                installmentAmountInput.value = '';
+            }
+        }
+
+        // Adiciona um evento de submit ao formulário
+        form.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            if (!userId) {
+                updateStatusMessage('Aguarde a conexão com o banco de dados.', 'bg-red-100');
+                return;
+            }
+
+            const date = document.getElementById('date').value;
+            const account = document.getElementById('account').value;
+            const description = descriptionInput.value;
+            const category = categoryInput.value || 'Não Categorizado';
+            const totalAmount = parseFloat(amountInput.value);
+
+            loadingIndicator.classList.remove('hidden');
+            
+            try {
+                if (isInstallmentCheckbox.checked) {
+                    const installments = parseInt(installmentsInput.value);
+                    const installmentAmount = totalAmount / installments;
+                    const baseDate = new Date(date + 'T00:00:00');
+
+                    for (let i = 0; i < installments; i++) {
+                        const installmentDate = new Date(baseDate.getFullYear(), baseDate.getMonth() + i, baseDate.getDate());
+                        const formattedDate = installmentDate.toISOString().slice(0, 10);
+                        const newTransaction = {
+                            date: formattedDate,
+                            account: account,
+                            description: `${description} (${i + 1}/${installments})`,
+                            category: category,
+                            amount: installmentAmount
+                        };
+                        await addDoc(collection(db, `artifacts/${appId}/users/${userId}/transactions`), newTransaction);
+                    }
+                    updateStatusMessage(`${installments} parcelas adicionadas com sucesso!`, 'bg-green-100');
+                } else {
+                    const newTransaction = {
+                        date: date,
+                        account: account,
+                        description: description,
+                        category: category,
+                        amount: totalAmount
+                    };
+                    await addDoc(collection(db, `artifacts/${appId}/users/${userId}/transactions`), newTransaction);
+                    updateStatusMessage('Transação adicionada com sucesso!', 'bg-green-100');
+                }
+            } catch (error) {
+                console.error("Erro ao adicionar transação:", error);
+                updateStatusMessage('Erro ao adicionar transação.', 'bg-red-100');
+            } finally {
+                loadingIndicator.classList.add('hidden');
+                form.reset();
+                isInstallmentCheckbox.checked = false;
+                installmentDetailsDiv.classList.add('hidden');
+            }
+        });
+
+        // Função para renderizar a lista de transações
+        function renderTransactions() {
+            transactionList.innerHTML = '';
+            if (transactions.length === 0) {
+                noTransactionsMessage.classList.remove('hidden');
+                exportBtn.disabled = true;
+                analyzeBtn.disabled = true;
+            } else {
+                noTransactionsMessage.classList.add('hidden');
+                exportBtn.disabled = false;
+                analyzeBtn.disabled = false;
+                // Ordenar as transações pela data antes de renderizar
+                const sortedTransactions = transactions.sort((a, b) => new Date(a.date) - new Date(b.date));
+                sortedTransactions.forEach((tx) => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${tx.date}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${accountsData[tx.account].owner} - ${tx.account.split('-')[0].charAt(0).toUpperCase() + tx.account.split('-')[0].slice(1)}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${tx.description}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${tx.category}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">R$ ${tx.amount.toFixed(2).replace('.', ',')}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                            <button onclick="removeTransaction('${tx.id}')" class="text-red-600 hover:text-red-900 transition-colors duration-200">Remover</button>
+                        </td>
+                    `;
+                    transactionList.appendChild(row);
+                });
+            }
+        }
+
+        // Função para remover uma transação
+        async function removeTransaction(docId) {
+            if (!userId) {
+                updateStatusMessage('Aguarde a conexão com o banco de dados.', 'bg-red-100');
+                return;
+            }
+            try {
+                await deleteDoc(doc(db, `artifacts/${appId}/users/${userId}/transactions`, docId));
+                updateStatusMessage('Transação removida.', 'bg-yellow-100');
+            } catch (error) {
+                console.error("Erro ao remover transação:", error);
+                updateStatusMessage('Erro ao remover transação.', 'bg-red-100');
+            }
+        }
+        window.removeTransaction = removeTransaction;
+
+        // Função para limpar todas as transações
+        clearBtn.addEventListener('click', async function() {
+            if (!userId) {
+                updateStatusMessage('Aguarde a conexão com o banco de dados.', 'bg-red-100');
+                return;
+            }
+            if (transactions.length === 0) {
+                updateStatusMessage('Nenhuma transação para limpar.', 'bg-blue-100');
+                return;
+            }
+            try {
+                loadingIndicator.classList.remove('hidden');
+                const userTransactionsRef = collection(db, `artifacts/${appId}/users/${userId}/transactions`);
+                const snapshot = await getDocs(userTransactionsRef);
+                const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
+                await Promise.all(deletePromises);
+                updateStatusMessage('Todas as transações foram limpas.', 'bg-blue-100');
+            } catch (error) {
+                console.error("Erro ao limpar transações:", error);
+                updateStatusMessage('Erro ao limpar transações. Verifique o console.', 'bg-red-100');
+            } finally {
+                loadingIndicator.classList.add('hidden');
+            }
+        });
+
+        // Evento de clique para exportar o OFX
+        exportBtn.addEventListener('click', function() {
+            if (transactions.length === 0) {
+                updateStatusMessage('Nenhuma transação para exportar.', 'bg-red-100');
+                return;
+            }
+            
+            const transactionsByAccount = transactions.reduce((acc, tx) => {
+                const account = tx.account;
+                if (!acc[account]) {
+                    acc[account] = [];
+                }
+                acc[account].push(tx);
+                return acc;
+            }, {});
+
+            for (const account in transactionsByAccount) {
+                const accountInfo = accountsData[account];
+                const accountTransactions = transactionsByAccount[account];
+                const currentDate = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+                
+                let ofxContent = `OFXHEADER:100\nDATA:OFXSGML\nVERSION:102\nSECURITY:NONE\nENCODING:USASCII\nCHARSET:1252\nCOMPRESSION:NONE\nOLDFILEUID:NONE\nNEWFILEUID:NONE\n\n<OFX>\n<SIGNONMSGSRSV1>\n<SONRS>\n<STATUS>\n<CODE>0</CODE>\n<SEVERITY>INFO</SEVERITY>\n</STATUS>\n<DTSERVER>${currentDate}120000</DTSERVER>\n<LANGUAGE>POR</LANGUAGE>\n<FI>\n<ORG>${accountInfo.org}</ORG>\n<FID>${accountInfo.bankId}</FID>\n</FI>\n</SONRS>\n</SIGNONMSGSRSV1>\n<CREDITCARDMSGSRSV1>\n<CCSTMTTRNRS>\n<TRNUID>1</TRNUID>\n<CCSTMTRS>\n<CURDEF>BRL</CURDEF>\n<CCACCTFROM>\n<ACCTID>${accountInfo.acctId}</ACCTID>\n</CCACCTFROM>\n<BANKTRANLIST>\n<DTSTART>${currentDate}</DTSTART>\n<DTEND>${currentDate}</DTEND>\n`;
+                accountTransactions.forEach(tx => {
+                    const txDate = tx.date.replace(/-/g, '') + '120000';
+                    const txType = tx.amount >= 0 ? 'DEBIT' : 'CREDIT';
+                    ofxContent += `<STMTTRN>\n<TRNTYPE>${txType}</TRNTYPE>\n<DTPOSTED>${txDate}</DTPOSTED>\n<TRNAMT>${tx.amount.toFixed(2)}</TRNAMT>\n<FITID>${tx.date.replace(/-/g, '')}-${Math.random().toString(36).substr(2, 9)}</FITID>\n<MEMO>${tx.description}</MEMO>\n</STMTTRN>\n`;
+                });
+                ofxContent += `</BANKTRANLIST>\n</CCSTMTRS>\n</CCSTMTTRNRS>\n</CREDITCARDMSGSRSV1>\n</OFX>\n`;
+
+                const blob = new Blob([ofxContent], { type: 'text/ofx' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `transacoes_${account}.ofx`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+            
+            updateStatusMessage('Arquivos OFX gerados e baixados com sucesso!', 'bg-green-100');
+        });
+
+        // Função para mostrar mensagens de status
+        function updateStatusMessage(message, bgColor) {
+            statusMessage.textContent = message;
+            statusMessage.className = `text-center mt-4 p-2 rounded-xl text-gray-700 ${bgColor}`;
+            statusMessage.classList.remove('hidden');
+        }
+
+        // Função para chamar a API do Gemini e sugerir categoria
+        suggestCategoryBtn.addEventListener('click', async function() {
+            const description = descriptionInput.value;
+            if (description.trim() === '') {
+                updateStatusMessage('Por favor, insira uma descrição para a transação.', 'bg-red-100');
+                return;
+            }
+
+            updateStatusMessage('Analisando descrição e sugerindo categoria...', 'bg-gray-200');
+            loadingIndicator.classList.remove('hidden');
+
+            const prompt = `Com base na descrição de uma transação financeira, sugira uma única categoria. As categorias devem ser breves e diretas. Se a descrição for "Gasolina", a categoria pode ser "Transporte". Se for "Netflix", pode ser "Entretenimento". Se for "Supermercado", pode ser "Alimentação". Se for "Salário", pode ser "Receita". A descrição é: "${description}". Responda apenas com o nome da categoria.`;
+
+            try {
+                const chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+                const payload = { contents: chatHistory };
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                const category = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+                
+                if (category) {
+                    categoryInput.value = category.trim();
+                    updateStatusMessage('Categoria sugerida com sucesso!', 'bg-purple-100');
+                } else {
+                    updateStatusMessage('Não foi possível sugerir uma categoria.', 'bg-red-100');
+                }
+
+            } catch (error) {
+                console.error('Erro ao chamar a API do Gemini:', error);
+                updateStatusMessage('Erro na comunicação com o assistente.', 'bg-red-100');
+            } finally {
+                loadingIndicator.classList.add('hidden');
+            }
+        });
+
+        // Função para chamar a API do Gemini e analisar as transações
+        analyzeBtn.addEventListener('click', async function() {
+            if (transactions.length === 0) {
+                updateStatusMessage('Adicione transações para fazer uma análise.', 'bg-red-100');
+                return;
+            }
+
+            loadingIndicator.classList.remove('hidden');
+            analysisContent.innerHTML = `<p class="text-center">Gerando sua análise de gastos...</p>`;
+            analysisModal.classList.remove('hidden');
+
+            const transactionListText = transactions.map(tx => {
+                return `Data: ${tx.date}, Descrição: ${tx.description}, Categoria: ${tx.category}, Valor: ${tx.amount.toFixed(2)}`
+            }).join('\n');
+
+            const prompt = `Analise a seguinte lista de transações financeiras e forneça um resumo perspicaz. Crie um parágrafo inicial com um resumo geral, em seguida, liste os 3 maiores gastos em ordem decrescente, e por fim, termine com um conselho financeiro curto e motivador.
+            As transações são:
+            ${transactionListText}
+            `;
+
+            try {
+                const chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+                const payload = { contents: chatHistory };
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const result = await response.json();
+                const analysis = result?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+                if (analysis) {
+                    analysisContent.innerHTML = analysis.replace(/\n/g, '<br>');
+                } else {
+                    analysisContent.innerHTML = `<p class="text-red-600">Ocorreu um erro ao gerar a análise. Tente novamente.</p>`;
+                }
+            } catch (error) {
+                console.error('Erro na análise:', error);
+                analysisContent.innerHTML = `<p class="text-red-600">Erro na comunicação com o assistente. Tente novamente.</p>`;
+            } finally {
+                loadingIndicator.classList.add('hidden');
+            }
+        });
+
+        closeModalBtn.addEventListener('click', () => {
+            analysisModal.classList.add('hidden');
+        });
+
+        window.onclick = function(event) {
+            if (event.target === analysisModal) {
+                analysisModal.classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+</html>
